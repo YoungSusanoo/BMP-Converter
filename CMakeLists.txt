@@ -5,6 +5,10 @@ set(CMAKE_CXX_STANDARD 14)
 
 project(${project_name})
 
-set(sources src/main.cpp)
+set(sources
+        src/main.cpp
+        src/HandleGuard/WinApiHandle.cpp)
+set(headers
+        src/HandleGuard/WinApiHandle.hpp)
 
-add_executable(${project_name} ${sources})
+add_executable(${project_name} ${headers} ${sources})
