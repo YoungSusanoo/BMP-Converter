@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.12)
 
 set(project_name "BMP-Converter")
 set(CMAKE_CXX_STANDARD 14)
@@ -7,8 +7,11 @@ project(${project_name})
 
 set(sources
         src/main.cpp
-        src/HandleGuard/WinApiHandle.cpp)
+        src/HandleGuard/WinApiHandle.cpp
+        src/BMP/BMP.cpp)
 set(headers
-        src/HandleGuard/WinApiHandle.hpp)
+        src/HandleGuard/WinApiHandle.hpp
+        src/BMP/BMP.hpp
+)
 
 add_executable(${project_name} ${headers} ${sources})
