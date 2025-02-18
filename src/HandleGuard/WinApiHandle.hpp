@@ -3,7 +3,7 @@
 
 #include <handleapi.h>
 
-namespace dowsorter
+namespace bmpconv
 {
   class WinApiHandle
   {
