@@ -8,10 +8,10 @@ project(${project_name})
 set(sources
         src/main.cpp
         src/HandleGuard/WinApiHandle.cpp
-        src/BMP/BMP.cpp)
-set(headers
-        src/HandleGuard/WinApiHandle.hpp
-        src/BMP/BMP.hpp
-)
+        src/BMP/BMP.cpp
+        src/BMP/ioProcessBMP.cpp)
 
-add_executable(${project_name} ${headers} ${sources})
+
+add_executable(${project_name} ${sources})
+
+target_include_directories(${project_name} PUBLIC src)
