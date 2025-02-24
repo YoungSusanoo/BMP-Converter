@@ -8,6 +8,9 @@
 
 namespace bmpconv
 {
+  constexpr size_t rgbquad_bits = 4;
+  constexpr size_t alignNum = 4;
+
   std::vector< RGBQUAD > paletteToRGBQUAD(const std::vector< char >& rawPalette)
   {
     std::vector< RGBQUAD > rgbVec(rawPalette.size() / 4);
@@ -25,7 +28,8 @@ namespace bmpconv
   {
     auto lambda = [](char a, const std::vector< RGBQUAD >& p) -> RGBQUAD
     {
-      return p.at(reinterpret_cast< unsigned char& >(a));
+      unsigned char f = reinterpret_cast< unsigned char& >(a);
+      return p.at(f);
     };
     auto func = std::bind(lambda, std::placeholders::_1, std::cref(palette));
     std::vector< RGBQUAD > completedColors(rawColors.size());
@@ -36,8 +40,6 @@ namespace bmpconv
 
 bmpconv::BMP bmpconv::readBMP(const std::wstring& filename)
 {
-  constexpr size_t rgbquad_bits = 4;
-  constexpr size_t alignNum = 4;
   std::ifstream in((filename.c_str()), std::ios_base::binary);
   if (!in)
   {
@@ -46,8 +48,8 @@ bmpconv::BMP bmpconv::readBMP(const std::wstring& filename)
 
   BITMAPFILEHEADER bFH;
   BITMAPINFOHEADER bIH;
-  in.read(reinterpret_cast< std::istream::char_type* >(&bFH), sizeof(bFH));
-  in.read(reinterpret_cast< std::istream::char_type* >(&bIH), sizeof(bIH));
+  in.read(reinterpret_cast< char* >(&bFH), sizeof(bFH));
+  in.read(reinterpret_cast< char* >(&bIH), sizeof(bIH));
 
   size_t bytesToSkip = bIH.biSize - sizeof(bIH);
   auto fileIt = std::istreambuf_iterator< char >(in);
@@ -55,7 +57,7 @@ bmpconv::BMP bmpconv::readBMP(const std::wstring& filename)
 
   size_t usedColors = bIH.biClrUsed ? bIH.biClrUsed : 1 << bIH.biBitCount;
   std::vector< char > rawPalette(usedColors * rgbquad_bits);
-  std::copy_n(fileIt, bIH.biClrUsed, rawPalette.begin());
+  std::copy_n(fileIt, usedColors * rgbquad_bits, rawPalette.begin());
   std::vector< RGBQUAD > palette = paletteToRGBQUAD(rawPalette);
 
   size_t currPos = sizeof(bFH) + bIH.biSize + usedColors * rgbquad_bits;
@@ -64,14 +66,62 @@ bmpconv::BMP bmpconv::readBMP(const std::wstring& filename)
     std::advance(fileIt, bFH.bfOffBits - currPos);
   }
 
-  std::vector< char > colors(bIH.biHeight * bIH.biWidth * bIH.biBitCount / 8);
+  size_t colorBytes = bIH.biWidth * bIH.biBitCount / 8;
+  size_t amountFromDivAlign = colorBytes % alignNum;
+  std::vector< char > colors(bIH.biHeight * colorBytes);
   auto colorsIt = colors.begin();
   for (size_t i = 0; i < bIH.biHeight; i++)
   {
-    std::copy_n(fileIt, bIH.biWidth * bIH.biBitCount, colorsIt);
-    size_t remaining = alignNum - bIH.biWidth * bIH.biBitCount % alignNum;
+    std::copy_n(fileIt, colorBytes, colorsIt);
+    size_t remaining = (alignNum - amountFromDivAlign) % alignNum;
     std::advance(fileIt, remaining);
+    std::advance(colorsIt, colorBytes);
   }
   std::vector< RGBQUAD > rgbQuadColors = getFrom8(colors, palette);
   return BMP(rgbQuadColors, bIH.biWidth, bIH.biHeight);
+}
+
+void bmpconv::writeBMP(const std::wstring& filename, const BMP& bmp)
+{
+  BITMAPFILEHEADER bFH;
+  BITMAPINFOHEADER bIH;
+
+  size_t alignMultiply = ((alignNum - 1) + bmp.getWidth()) / alignNum;
+  size_t bytesToAlign = alignNum * alignMultiply - bmp.getWidth();
+  bFH.bfType = 0x4D42;
+  bFH.bfOffBits = sizeof(bIH) + sizeof(bFH);
+  bFH.bfSize = sizeof(bIH) + sizeof(bFH);
+  bFH.bfSize += (bmp.getWidth() + bytesToAlign) * bmp.getHeight() * 3;
+
+  bIH.biSize = sizeof(bIH);
+  bIH.biWidth = bmp.getWidth();
+  bIH.biHeight = bmp.getHeight();
+  bIH.biPlanes = 1;
+  bIH.biBitCount = 24;
+  bIH.biCompression = 0;
+  bIH.biSizeImage = 0;
+  bIH.biXPelsPerMeter = 0;
+  bIH.biYPelsPerMeter = 0;
+  bIH.biClrUsed = 0;
+  bIH.biClrImportant = 0;
+  std::ofstream file(filename.c_str(), std::ios::binary);
+  file.write(reinterpret_cast< char* >(&bFH), sizeof(bFH));
+  file.write(reinterpret_cast< char* >(&bIH), sizeof(bIH));
+
+  auto colorsIt = bmp.getColors().cbegin();
+  auto outputLambda = [](RGBQUAD color, std::ofstream& file)
+  {
+    size_t size = sizeof(color.rgbBlue);
+    file.write(reinterpret_cast< char* >(&color.rgbBlue), size);
+    file.write(reinterpret_cast< char* >(&color.rgbGreen), size);
+    file.write(reinterpret_cast< char* >(&color.rgbRed), size);
+  };
+  constexpr char charToWrite = '0';
+  auto func = std::bind(outputLambda, std::placeholders::_1, std::ref(file));
+  for (size_t i = 0; i < bmp.getHeight(); i++)
+  {
+    std::for_each(colorsIt, colorsIt + bmp.getWidth(), func);
+    file.write(&charToWrite, bytesToAlign);
+    std::advance(colorsIt, bmp.getWidth());
+  }
 }
