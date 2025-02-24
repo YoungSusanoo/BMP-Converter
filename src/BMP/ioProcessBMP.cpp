@@ -23,9 +23,9 @@ namespace bmpconv
 
   std::vector< RGBQUAD > getFrom8(const std::vector< char >& rawColors, const std::vector< RGBQUAD >& palette)
   {
-    auto lambda = [](const char& a, const std::vector< RGBQUAD >& p) -> RGBQUAD
+    auto lambda = [](char a, const std::vector< RGBQUAD >& p) -> RGBQUAD
     {
-      return p.at(a);
+      return p.at(reinterpret_cast< unsigned char& >(a));
     };
     auto func = std::bind(lambda, std::placeholders::_1, std::cref(palette));
     std::vector< RGBQUAD > completedColors(rawColors.size());
@@ -36,6 +36,8 @@ namespace bmpconv
 
 bmpconv::BMP bmpconv::readBMP(const std::wstring& filename)
 {
+  constexpr size_t rgbquad_bits = 4;
+  constexpr size_t alignNum = 4;
   std::ifstream in((filename.c_str()), std::ios_base::binary);
   if (!in)
   {
@@ -51,11 +53,12 @@ bmpconv::BMP bmpconv::readBMP(const std::wstring& filename)
   auto fileIt = std::istreambuf_iterator< char >(in);
   std::advance(fileIt, bytesToSkip);
 
-  std::vector< char > rawPalette(bIH.biClrUsed);
+  size_t usedColors = bIH.biClrUsed ? bIH.biClrUsed : 1 << bIH.biBitCount;
+  std::vector< char > rawPalette(usedColors * rgbquad_bits);
   std::copy_n(fileIt, bIH.biClrUsed, rawPalette.begin());
   std::vector< RGBQUAD > palette = paletteToRGBQUAD(rawPalette);
 
-  size_t currPos = sizeof(bFH) + bIH.biSize + bIH.biClrUsed;
+  size_t currPos = sizeof(bFH) + bIH.biSize + usedColors * rgbquad_bits;
   if (currPos < bFH.bfOffBits)
   {
     std::advance(fileIt, bFH.bfOffBits - currPos);
@@ -66,9 +69,9 @@ bmpconv::BMP bmpconv::readBMP(const std::wstring& filename)
   for (size_t i = 0; i < bIH.biHeight; i++)
   {
     std::copy_n(fileIt, bIH.biWidth * bIH.biBitCount, colorsIt);
-    size_t remaining = 4 - bIH.biWidth * bIH.biBitCount % 4;
+    size_t remaining = alignNum - bIH.biWidth * bIH.biBitCount % alignNum;
     std::advance(fileIt, remaining);
   }
   std::vector< RGBQUAD > rgbQuadColors = getFrom8(colors, palette);
-  return BMP(palette, bIH.biWidth, bIH.biHeight);
+  return BMP(rgbQuadColors, bIH.biWidth, bIH.biHeight);
 }
